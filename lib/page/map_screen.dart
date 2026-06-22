@@ -501,67 +501,39 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                 width: 1,
                               ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Left Section: Minecraft Coordinates (hovered or center screen)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      state.hoverX != null
-                                          ? 'CURSOR POSITION'
-                                          : 'CENTER (LOOKING AT)',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.0,
+                            child: LayoutBuilder(
+                              builder: (context, footerConstraints) {
+                                final bool isNarrow = footerConstraints.maxWidth < 580;
+                                if (isNarrow) {
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          _buildCoordsColumn(state),
+                                          _buildChunkColumn(state),
+                                        ],
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        _buildCoordLabel('X', state.hoverX ?? state.centerX.round()),
-                                        const SizedBox(width: 16),
-                                        _buildCoordLabel('Z', state.hoverZ ?? state.centerZ.round()),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                // Right Section: Chunk & Region details
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'CHUNK & REGION',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.0,
+                                      const SizedBox(height: 10),
+                                      Container(
+                                        height: 1,
+                                        color: Colors.white.withValues(alpha: 0.08),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        _buildTextBadge(
-                                          'Chunk',
-                                          _getChunkCoord(state.hoverX ?? state.centerX.round()),
-                                          _getChunkCoord(state.hoverZ ?? state.centerZ.round()),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _buildRegionBadge(
-                                          state.hoverX ?? state.centerX.round(),
-                                          state.hoverZ ?? state.centerZ.round(),
-                                        ),
-                                      ],
-                                    ),
+                                      const SizedBox(height: 10),
+                                      _buildBiomeColumn(state),
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _buildCoordsColumn(state),
+                                    _buildBiomeColumn(state),
+                                    _buildChunkColumn(state),
                                   ],
-                                ),
-                              ],
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -649,6 +621,138 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
           fontWeight: FontWeight.bold,
         ),
       ),
+    );
+  }
+
+  Widget _buildBiomeBadge(String? biome) {
+    final String label = biome != null ? biome.toUpperCase().replaceAll('_', ' ') : 'UNKNOWN';
+    final bool isKnown = biome != null && biome != 'unknown';
+    
+    Color badgeColor = const Color(0xFF888888);
+    Color textColor = Colors.white;
+    
+    if (isKnown) {
+      final name = biome.toLowerCase();
+      if (name.contains('ocean') || name.contains('river') || name == 'swamp') {
+        badgeColor = const Color(0xFF2979FF); // Blueish
+      } else if (name.contains('desert') || name.contains('beach')) {
+        badgeColor = const Color(0xFFFFD600); // Yellowish
+        textColor = Colors.black;
+      } else if (name.contains('forest') || name == 'plains' || name.contains('grove') || name.contains('meadow')) {
+        badgeColor = const Color(0xFF00E676); // Emerald Green
+      } else if (name.contains('mountain') || name.contains('hills') || name.contains('peaks') || name.contains('slopes')) {
+        badgeColor = const Color(0xFFCFD8DC); // Greyish
+        textColor = Colors.black;
+      } else if (name.contains('badlands')) {
+        badgeColor = const Color(0xFFFF3D00); // Orange/Redstone Red
+      } else if (name.contains('nether') || name.contains('crimson') || name.contains('valley')) {
+        badgeColor = const Color(0xFFD50000); // Nether Crimson Red
+      } else if (name.contains('end')) {
+        badgeColor = const Color(0xFFAA00FF); // End Void Purple
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: badgeColor.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoordsColumn(MapState state) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          state.hoverX != null ? 'CURSOR POSITION' : 'CENTER (LOOKING AT)',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildCoordLabel('X', state.hoverX ?? state.centerX.round()),
+            const SizedBox(width: 16),
+            _buildCoordLabel('Z', state.hoverZ ?? state.centerZ.round()),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBiomeColumn(MapState state) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'BIOME',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 4),
+        _buildBiomeBadge(state.hoverBiome),
+      ],
+    );
+  }
+
+  Widget _buildChunkColumn(MapState state) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          'CHUNK & REGION',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildTextBadge(
+              'Chunk',
+              _getChunkCoord(state.hoverX ?? state.centerX.round()),
+              _getChunkCoord(state.hoverZ ?? state.centerZ.round()),
+            ),
+            const SizedBox(width: 8),
+            _buildRegionBadge(
+              state.hoverX ?? state.centerX.round(),
+              state.hoverZ ?? state.centerZ.round(),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
