@@ -1,5 +1,15 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:mc_map_viewer/domain/biome_color_map.dart';
+
+class TileData {
+  final ui.Image image;
+  final ByteData rgbaBytes;
+
+  TileData({required this.image, required this.rgbaBytes});
+}
 
 class MapState extends ChangeNotifier {
   // World Seed
@@ -32,6 +42,14 @@ class MapState extends ChangeNotifier {
   int? get hoverX => _hoverX;
   int? get hoverZ => _hoverZ;
 
+  // Hovered biome name
+  String? _hoverBiome;
+  String? get hoverBiome => _hoverBiome;
+
+  // LRU cache for tile pixel data (key: "zoom-tx-ty")
+  final Map<String, TileData> _tileCache = {};
+  static const int maxCacheSize = 100;
+
   // Scale: number of blocks represented by 1 screen pixel
   double get scale => math.pow(2.0, defaultDepth - _zoom).toDouble();
 
@@ -48,8 +66,39 @@ class MapState extends ChangeNotifier {
   void setSeed(String value) {
     if (_seed != value) {
       _seed = value.trim();
+      _tileCache.clear();
+      _hoverBiome = null;
       notifyListeners();
     }
+  }
+
+  // Register loaded tile data in the cache
+  void registerTile(int tx, int ty, int zoomLevel, TileData tileData) {
+    final String key = '$zoomLevel-$tx-$ty';
+    if (_tileCache.containsKey(key)) return;
+
+    // Cache eviction (LRU policy)
+    if (_tileCache.length >= maxCacheSize) {
+      final String oldestKey = _tileCache.keys.first;
+      _tileCache.remove(oldestKey);
+    }
+
+    _tileCache[key] = tileData;
+    
+    // If user is currently hovering on this tile, update the biome immediately
+    if (_hoverX != null && _hoverZ != null) {
+      _updateBiomeForHover(_hoverX!, _hoverZ!);
+    }
+  }
+
+  // Check if a tile is already loaded/cached
+  bool isTileCached(int tx, int ty, int zoomLevel) {
+    return _tileCache.containsKey('$zoomLevel-$tx-$ty');
+  }
+
+  // Get cached TileData
+  TileData? getCachedTile(int tx, int ty, int zoomLevel) {
+    return _tileCache['$zoomLevel-$tx-$ty'];
   }
 
   // Pan the map center by a pixel delta (dx, dy)
@@ -101,24 +150,65 @@ class MapState extends ChangeNotifier {
     final double halfW = viewportSize.width / 2.0;
     final double halfH = viewportSize.height / 2.0;
 
-    _hoverX = (_centerX + (localPosition.dx - halfW) * s).floor();
-    _hoverZ = (_centerZ + (localPosition.dy - halfH) * s).floor();
+    final int x = (_centerX + (localPosition.dx - halfW) * s).floor();
+    final int z = (_centerZ + (localPosition.dy - halfH) * s).floor();
+
+    _hoverX = x;
+    _hoverZ = z;
+
+    _updateBiomeForHover(x, z);
     notifyListeners();
+  }
+
+  // Extract pixel color from the tile and find the closest biome name
+  void _updateBiomeForHover(int x, int z) {
+    final int zInt = integerZoom;
+    final double tileSizeInBlocks = getTileSizeInBlocks(zInt);
+    
+    final int tx = (x / tileSizeInBlocks).floor();
+    final int ty = (z / tileSizeInBlocks).floor();
+
+    final String key = '$zInt-$tx-$ty';
+    final TileData? tileData = _tileCache[key];
+
+    if (tileData != null) {
+      // Offset from tile top-left in blocks
+      final double dx = x - tx * tileSizeInBlocks;
+      final double dz = z - ty * tileSizeInBlocks;
+
+      // Scale (blocks per pixel) inside the tile
+      final double scaleAtZ = tileSizeInBlocks / 256.0;
+
+      // Pixel coordinates (0 to 255)
+      final int px = (dx / scaleAtZ).floor().clamp(0, 255);
+      final int py = (dz / scaleAtZ).floor().clamp(0, 255);
+
+      final int offset = (py * 256 + px) * 4;
+
+      if (offset + 2 < tileData.rgbaBytes.lengthInBytes) {
+        final int r = tileData.rgbaBytes.getUint8(offset);
+        final int g = tileData.rgbaBytes.getUint8(offset + 1);
+        final int b = tileData.rgbaBytes.getUint8(offset + 2);
+        
+        _hoverBiome = BiomeColorMap.getBiomeNameByColor(r, g, b);
+      } else {
+        _hoverBiome = null;
+      }
+    } else {
+      _hoverBiome = null;
+    }
   }
 
   // Clear hover coordinates when the mouse leaves the area
   void clearHover() {
     _hoverX = null;
     _hoverZ = null;
+    _hoverBiome = null;
     notifyListeners();
   }
 
   // Animate map center back to (0, 0)
   void centerOnSpawn(TickerProvider vsync) {
-    // We can run a quick AnimationController to interpolate centerX, centerZ and zoom
-    // But to keep map state pure, we will handle the animation in the MapScreen widget
-    // by calling setCenter and setZoom incrementally. 
-    // We provide this helper to jump there instantly if needed.
     _centerX = 0.0;
     _centerZ = 0.0;
     _zoom = 2.0;
