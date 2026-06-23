@@ -141,7 +141,7 @@ class _TileWidgetState extends State<TileWidget> {
           'http://localhost:8080/api/v1/map/tile?seed=${widget.seed}&zoom=${widget.zoom}&tx=${widget.tx}&ty=${widget.ty}&dimension=${widget.dimension}';
 
       debugPrint('[TileWidget Fetching] Requesting: $tileUrl');
-      final response = await http.get(Uri.parse(tileUrl)).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(tileUrl)).timeout(const Duration(seconds: 25));
       if (response.statusCode == 200) {
         final Uint8List bytes = response.bodyBytes;
         debugPrint('[TileWidget Success] Fetched tile: $key (bytes: ${bytes.length})');
@@ -255,11 +255,13 @@ class _TileWidgetState extends State<TileWidget> {
                     child: RawImage(
                       image: _tileData!.image,
                       fit: BoxFit.fill,
+                      filterQuality: .none,
                     ),
                   )
                 : RawImage(
                     image: _tileData!.image,
                     fit: BoxFit.fill,
+                    filterQuality: .none,
                   ),
 
           // Show Linear Loading bar if downloading

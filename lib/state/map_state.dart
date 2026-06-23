@@ -1,8 +1,11 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:mc_map_viewer/domain/biome_color_map.dart';
+import 'package:mc_map_viewer/domain/structure.dart';
 
 class TileData {
   final ui.Image image;
@@ -29,6 +32,13 @@ class MapState extends ChangeNotifier {
   int _dimension = 0;
   int get dimension => _dimension;
 
+  // Visible POI Structures
+  List<Structure> _structures = [];
+  List<Structure> get structures => _structures;
+
+  bool _isFetchingStructures = false;
+  bool get isFetchingStructures => _isFetchingStructures;
+
   // Center position of the map viewport in Minecraft coordinates (X, Z)
   double _centerX = 0.0;
   double _centerZ = 0.0;
@@ -46,7 +56,7 @@ class MapState extends ChangeNotifier {
   int get previousIntegerZoom => _previousIntegerZoom;
 
   // Minimum and maximum zoom levels
-  final double minZoom = -6.0;
+  final double minZoom = 2.0;
   final double maxZoom = 10.0;
 
   // Default depth factor for scaling.
@@ -84,6 +94,7 @@ class MapState extends ChangeNotifier {
     if (_seed != value) {
       _seed = value.trim();
       _tileCache.clear();
+      _structures.clear();
       _hoverBiome = null;
       notifyListeners();
     }
@@ -93,6 +104,7 @@ class MapState extends ChangeNotifier {
     if (_dimension != value) {
       _dimension = value;
       _tileCache.clear();
+      _structures.clear();
       _hoverBiome = null;
       notifyListeners();
     }
@@ -251,6 +263,51 @@ class MapState extends ChangeNotifier {
   void _checkZoomChange(int oldZInt) {
     if (integerZoom != oldZInt) {
       _previousIntegerZoom = oldZInt;
+    }
+  }
+
+  Future<void> fetchStructures(double minX, double minZ, double maxX, double maxZ) async {
+    _isFetchingStructures = true;
+    notifyListeners();
+
+    try {
+      List<String> types = [];
+      if (_dimension == 0) {
+        types = ['village', 'monument', 'stronghold'];
+      } else if (_dimension == -1) {
+        types = ['fortress', 'bastion'];
+      } else if (_dimension == 1) {
+        types = ['end_city'];
+      }
+
+      if (types.isEmpty) {
+        _structures = [];
+        _isFetchingStructures = false;
+        notifyListeners();
+        return;
+      }
+
+      final typeParams = types.map((t) => 'types=$t').join('&');
+      final String url = 'http://localhost:8080/api/v1/structures?'
+          'seed=$_seed&version=1.20&dimension=$_dimension&'
+          'minX=${minX.round()}&minZ=${minZ.round()}&'
+          'maxX=${maxX.round()}&maxZ=${maxZ.round()}&$typeParams';
+
+      debugPrint('[MapState Fetching Structures] Requesting: $url');
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body) as List<dynamic>;
+        _structures = data.map((json) => Structure.fromJson(json as Map<String, dynamic>)).toList();
+        debugPrint('[MapState Structures Success] Loaded ${_structures.length} structures');
+      } else {
+        debugPrint('[MapState Structures Error] Server returned status ${response.statusCode}');
+      }
+    } catch (e, stack) {
+      debugPrint('[MapState Structures Exception] Failed to fetch structures: $e\n$stack');
+    } finally {
+      _isFetchingStructures = false;
+      notifyListeners();
     }
   }
 }
