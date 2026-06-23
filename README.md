@@ -2,7 +2,7 @@
 
 Este projeto é o frontend de uma ferramenta de pré-visualização interativa de mundos de Minecraft em 2D baseada inteiramente na Seed do mundo. A aplicação foi escrita em Flutter com foco em interfaces performáticas, renderização otimizada de mapas e transições fluidas.
 
-![alt text](https://github.com/desodre/mc_map_viewer/blob/main/images/app.jpg?raw=true)
+![alt text](https://github.com/desodre/Minecraft-Map-Viewer/blob/main/images/app.png?raw=true)
 
 ---
 
