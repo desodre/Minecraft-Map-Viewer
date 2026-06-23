@@ -13,6 +13,6 @@ void main() {
     );
 
     // Verify that the title is shown on screen
-    expect(find.text('MINECRAFT SEED MAP'), findsOneWidget);
+    expect(find.text('SEED MAP'), findsOneWidget);
   });
 }

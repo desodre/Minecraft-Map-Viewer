@@ -52,7 +52,7 @@ class _TileWidgetState extends State<TileWidget> {
 
   Future<void> _loadTile() async {
     final state = Provider.of<MapState>(context, listen: false);
-    final String key = '${widget.zoom}-${widget.tx}-${widget.ty}';
+    final String key = '${widget.seed}-${widget.zoom}-${widget.tx}-${widget.ty}';
 
     // 1. Check if already cached in global MapState
     if (state.isTileCached(widget.tx, widget.ty, widget.zoom)) {

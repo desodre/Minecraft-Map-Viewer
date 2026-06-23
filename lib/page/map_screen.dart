@@ -153,6 +153,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                   width: sizeOnScreen + 0.5, // Tiny overlap to fix seam lines
                   height: sizeOnScreen + 0.5,
                   child: TileWidget(
+                    key: ValueKey('${state.seed}-$z-$tx-$ty'),
                     seed: state.seed,
                     zoom: z,
                     tx: tx,

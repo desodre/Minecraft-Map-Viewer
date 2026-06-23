@@ -12,8 +12,17 @@ class TileData {
 }
 
 class MapState extends ChangeNotifier {
+  static String generateRandomSeed() {
+    final rand = math.Random();
+    final int upper = rand.nextInt(2147483647);
+    final int lower = rand.nextInt(2147483647);
+    final int sign = rand.nextBool() ? 1 : -1;
+    final int seedVal = ((upper << 32) | lower) * sign;
+    return seedVal.toString();
+  }
+
   // World Seed
-  String _seed = '1234567890';
+  String _seed = generateRandomSeed();
   String get seed => _seed;
 
   // Center position of the map viewport in Minecraft coordinates (X, Z)
@@ -74,7 +83,7 @@ class MapState extends ChangeNotifier {
 
   // Register loaded tile data in the cache
   void registerTile(int tx, int ty, int zoomLevel, TileData tileData) {
-    final String key = '$zoomLevel-$tx-$ty';
+    final String key = '$_seed-$zoomLevel-$tx-$ty';
     if (_tileCache.containsKey(key)) return;
 
     // Cache eviction (LRU policy)
@@ -93,12 +102,12 @@ class MapState extends ChangeNotifier {
 
   // Check if a tile is already loaded/cached
   bool isTileCached(int tx, int ty, int zoomLevel) {
-    return _tileCache.containsKey('$zoomLevel-$tx-$ty');
+    return _tileCache.containsKey('$_seed-$zoomLevel-$tx-$ty');
   }
 
   // Get cached TileData
   TileData? getCachedTile(int tx, int ty, int zoomLevel) {
-    return _tileCache['$zoomLevel-$tx-$ty'];
+    return _tileCache['$_seed-$zoomLevel-$tx-$ty'];
   }
 
   // Pan the map center by a pixel delta (dx, dy)
@@ -168,7 +177,7 @@ class MapState extends ChangeNotifier {
     final int tx = (x / tileSizeInBlocks).floor();
     final int ty = (z / tileSizeInBlocks).floor();
 
-    final String key = '$zInt-$tx-$ty';
+    final String key = '$_seed-$zInt-$tx-$ty';
     final TileData? tileData = _tileCache[key];
 
     if (tileData != null) {
