@@ -229,18 +229,18 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
               fontFamily: 'monospace',
             ),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.85),
+              color: Colors.black.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: markerColor.withOpacity(0.5), width: 1),
+              border: Border.all(color: markerColor.withValues(alpha: 0.5), width: 1),
             ),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.black.withValues(alpha: 0.6),
                 shape: BoxShape.circle,
                 border: Border.all(color: markerColor, width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color: markerColor.withOpacity(0.3),
+                    color: markerColor.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
