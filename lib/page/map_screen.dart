@@ -127,6 +127,56 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
           // Generate tile widgets list
           final List<Widget> tileWidgets = [];
+
+          // Render background tiles from previous integer zoom level (stretched/shrunk)
+          final int prevZ = state.previousIntegerZoom;
+          if (prevZ != z) {
+            final double prevTileSizeInBlocks = state.getTileSizeInBlocks(prevZ);
+
+            final int prevTxMin = (xMin / prevTileSizeInBlocks).floor();
+            final int prevTxMax = (xMax / prevTileSizeInBlocks).floor();
+            final int prevTyMin = (zMin / prevTileSizeInBlocks).floor();
+            final int prevTyMax = (zMax / prevTileSizeInBlocks).floor();
+
+            // Clamp bounds to prevent rendering crashes
+            final int clampedPrevTxMin = prevTxMin.clamp(prevTxMin, prevTxMin + 25);
+            final int clampedPrevTxMax = prevTxMax.clamp(clampedPrevTxMin, clampedPrevTxMin + 25);
+            final int clampedPrevTyMin = prevTyMin.clamp(prevTyMin, prevTyMin + 25);
+            final int clampedPrevTyMax = prevTyMax.clamp(clampedPrevTyMin, clampedPrevTyMin + 25);
+
+            for (int tx = clampedPrevTxMin; tx <= clampedPrevTxMax; tx++) {
+              for (int ty = clampedPrevTyMin; ty <= clampedPrevTyMax; ty++) {
+                if (state.isTileCached(tx, ty, prevZ)) {
+                  final double tileX = tx * prevTileSizeInBlocks;
+                  final double tileZ = ty * prevTileSizeInBlocks;
+
+                  // Screen coordinates at current scale
+                  final double screenX = halfW + (tileX - state.centerX) / scale;
+                  final double screenZ = halfH + (tileZ - state.centerZ) / scale;
+                  final double sizeOnScreen = prevTileSizeInBlocks / scale;
+
+                  tileWidgets.add(
+                    Positioned(
+                      key: ValueKey('bg-${state.seed}-${state.dimension}-$prevZ-$tx-$ty'),
+                      left: screenX,
+                      top: screenZ,
+                      width: sizeOnScreen + 0.5,
+                      height: sizeOnScreen + 0.5,
+                      child: TileWidget(
+                        key: ValueKey('bg-tile-${state.seed}-${state.dimension}-$prevZ-$tx-$ty'),
+                        seed: state.seed,
+                        dimension: state.dimension,
+                        zoom: prevZ,
+                        tx: tx,
+                        ty: ty,
+                        size: sizeOnScreen,
+                      ),
+                    ),
+                  );
+                }
+              }
+            }
+          }
           
           // Clamp bounds to prevent rendering crashes on extreme invalid states
           final int clampedTxMin = txMin.clamp(txMin, txMin + 25);
@@ -148,13 +198,15 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
               tileWidgets.add(
                 Positioned(
+                  key: ValueKey('fg-${state.seed}-${state.dimension}-$z-$tx-$ty'),
                   left: screenX,
                   top: screenZ,
                   width: sizeOnScreen + 0.5, // Tiny overlap to fix seam lines
                   height: sizeOnScreen + 0.5,
                   child: TileWidget(
-                    key: ValueKey('${state.seed}-$z-$tx-$ty'),
+                    key: ValueKey('fg-tile-${state.seed}-${state.dimension}-$z-$tx-$ty'),
                     seed: state.seed,
+                    dimension: state.dimension,
                     zoom: z,
                     tx: tx,
                     ty: ty,
@@ -414,6 +466,87 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                 ),
               ),
 
+              // 3.5. Floating Glassmorphic Dimension Selector
+              Positioned(
+                top: 145,
+                left: 20,
+                right: 20,
+                child: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 400),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                width: 1.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                // Overworld
+                                Expanded(
+                                  child: _buildDimensionButton(
+                                    context,
+                                    label: 'Overworld',
+                                    dimensionId: 0,
+                                    activeColor: const Color(0xFF00FF88),
+                                    icon: Icons.public_rounded,
+                                    activeDimension: state.dimension,
+                                    onTap: () => state.setDimension(0),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                // Nether
+                                Expanded(
+                                  child: _buildDimensionButton(
+                                    context,
+                                    label: 'Nether',
+                                    dimensionId: -1,
+                                    activeColor: const Color(0xFFFF3D00),
+                                    icon: Icons.local_fire_department_rounded,
+                                    activeDimension: state.dimension,
+                                    onTap: () => state.setDimension(-1),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                // The End
+                                Expanded(
+                                  child: _buildDimensionButton(
+                                    context,
+                                    label: 'The End',
+                                    dimensionId: 1,
+                                    activeColor: const Color(0xFFAA00FF),
+                                    icon: Icons.brightness_2_rounded,
+                                    activeDimension: state.dimension,
+                                    onTap: () => state.setDimension(1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
               // 4. Floating Zoom & Navigation Controls Column
               Positioned(
                 bottom: 120,
@@ -634,7 +767,11 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     
     if (isKnown) {
       final name = biome.toLowerCase();
-      if (name.contains('ocean') || name.contains('river') || name == 'swamp') {
+      if (name.contains('nether') || name.contains('crimson') || name.contains('warped') || name.contains('basalt') || name.contains('valley')) {
+        badgeColor = const Color(0xFFD50000); // Nether Crimson Red
+      } else if (name.contains('end')) {
+        badgeColor = const Color(0xFFAA00FF); // End Void Purple
+      } else if (name.contains('ocean') || name.contains('river') || name == 'swamp') {
         badgeColor = const Color(0xFF2979FF); // Blueish
       } else if (name.contains('desert') || name.contains('beach')) {
         badgeColor = const Color(0xFFFFD600); // Yellowish
@@ -646,10 +783,6 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
         textColor = Colors.black;
       } else if (name.contains('badlands')) {
         badgeColor = const Color(0xFFFF3D00); // Orange/Redstone Red
-      } else if (name.contains('nether') || name.contains('crimson') || name.contains('valley')) {
-        badgeColor = const Color(0xFFD50000); // Nether Crimson Red
-      } else if (name.contains('end')) {
-        badgeColor = const Color(0xFFAA00FF); // End Void Purple
       }
     }
 
@@ -754,6 +887,60 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildDimensionButton(
+    BuildContext context, {
+    required String label,
+    required int dimensionId,
+    required Color activeColor,
+    required IconData icon,
+    required int activeDimension,
+    required VoidCallback onTap,
+  }) {
+    final bool isActive = activeDimension == dimensionId;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isActive 
+              ? activeColor.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive 
+                ? activeColor.withValues(alpha: 0.4)
+                : Colors.transparent,
+            width: 1,
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isActive ? activeColor : Colors.white.withValues(alpha: 0.5),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

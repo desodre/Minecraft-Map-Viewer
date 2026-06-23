@@ -25,6 +25,10 @@ class MapState extends ChangeNotifier {
   String _seed = generateRandomSeed();
   String get seed => _seed;
 
+  // Dimension (0 = Overworld, -1 = Nether, 1 = End)
+  int _dimension = 0;
+  int get dimension => _dimension;
+
   // Center position of the map viewport in Minecraft coordinates (X, Z)
   double _centerX = 0.0;
   double _centerZ = 0.0;
@@ -36,6 +40,10 @@ class MapState extends ChangeNotifier {
   // Lower zoom = wider look (more blocks per pixel).
   double _zoom = 2.0;
   double get zoom => _zoom;
+
+  // Track the previous integer zoom level for keep-buffer background rendering
+  int _previousIntegerZoom = 2;
+  int get previousIntegerZoom => _previousIntegerZoom;
 
   // Minimum and maximum zoom levels
   final double minZoom = -6.0;
@@ -81,9 +89,18 @@ class MapState extends ChangeNotifier {
     }
   }
 
+  void setDimension(int value) {
+    if (_dimension != value) {
+      _dimension = value;
+      _tileCache.clear();
+      _hoverBiome = null;
+      notifyListeners();
+    }
+  }
+
   // Register loaded tile data in the cache
   void registerTile(int tx, int ty, int zoomLevel, TileData tileData) {
-    final String key = '$_seed-$zoomLevel-$tx-$ty';
+    final String key = '$_seed-$_dimension-$zoomLevel-$tx-$ty';
     if (_tileCache.containsKey(key)) return;
 
     // Cache eviction (LRU policy)
@@ -102,12 +119,12 @@ class MapState extends ChangeNotifier {
 
   // Check if a tile is already loaded/cached
   bool isTileCached(int tx, int ty, int zoomLevel) {
-    return _tileCache.containsKey('$_seed-$zoomLevel-$tx-$ty');
+    return _tileCache.containsKey('$_seed-$_dimension-$zoomLevel-$tx-$ty');
   }
 
   // Get cached TileData
   TileData? getCachedTile(int tx, int ty, int zoomLevel) {
-    return _tileCache['$_seed-$zoomLevel-$tx-$ty'];
+    return _tileCache['$_seed-$_dimension-$zoomLevel-$tx-$ty'];
   }
 
   // Pan the map center by a pixel delta (dx, dy)
@@ -128,9 +145,12 @@ class MapState extends ChangeNotifier {
   // Zoom relative to the screen focal point
   void updateZoom(double zoomDelta, Offset focalPoint, Size viewportSize) {
     final double oldScale = scale;
+    final int oldZInt = integerZoom;
     
     // Clamp zoom level
     _zoom = (_zoom + zoomDelta).clamp(minZoom, maxZoom);
+    
+    _checkZoomChange(oldZInt);
     
     final double newScale = scale;
     
@@ -149,7 +169,9 @@ class MapState extends ChangeNotifier {
 
   // Set absolute zoom
   void setZoom(double value) {
+    final int oldZInt = integerZoom;
     _zoom = value.clamp(minZoom, maxZoom);
+    _checkZoomChange(oldZInt);
     notifyListeners();
   }
 
@@ -177,7 +199,7 @@ class MapState extends ChangeNotifier {
     final int tx = (x / tileSizeInBlocks).floor();
     final int ty = (z / tileSizeInBlocks).floor();
 
-    final String key = '$_seed-$zInt-$tx-$ty';
+    final String key = '$_seed-$_dimension-$zInt-$tx-$ty';
     final TileData? tileData = _tileCache[key];
 
     if (tileData != null) {
@@ -218,9 +240,17 @@ class MapState extends ChangeNotifier {
 
   // Animate map center back to (0, 0)
   void centerOnSpawn(TickerProvider vsync) {
+    final int oldZInt = integerZoom;
     _centerX = 0.0;
     _centerZ = 0.0;
     _zoom = 2.0;
+    _checkZoomChange(oldZInt);
     notifyListeners();
+  }
+
+  void _checkZoomChange(int oldZInt) {
+    if (integerZoom != oldZInt) {
+      _previousIntegerZoom = oldZInt;
+    }
   }
 }

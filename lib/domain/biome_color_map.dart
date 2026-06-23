@@ -162,5 +162,9 @@ class BiomeColorMap {
 
     // End
     register(9, "the_end", const Color(0xFF383818));
+    register(40, "small_end_islands", const Color(0xFF4A4A25));
+    register(41, "end_midlands", const Color(0xFF5A5A30));
+    register(42, "end_highlands", const Color(0xFF6C6C38));
+    register(43, "end_barrens", const Color(0xFF3C3C1B));
   }
 }
