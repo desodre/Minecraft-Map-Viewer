@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/gestures.dart';
@@ -25,6 +26,16 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
   double _lastScale = 1.0;
   Offset _lastFocalPoint = Offset.zero;
 
+  // Viewport and structure fetching state
+  MapState? _mapState;
+  String? _lastSeed;
+  int? _lastDimension;
+  double? _lastCenterX;
+  double? _lastCenterZ;
+  double? _lastZoom;
+  Timer? _debounceTimer;
+  Size _viewportSize = Size.zero;
+
   @override
   void initState() {
     super.initState();
@@ -48,9 +59,34 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = Provider.of<MapState>(context, listen: false);
+    if (_mapState != state) {
+      _mapState?.removeListener(_onMapStateChanged);
+      _mapState = state;
+      _mapState?.addListener(_onMapStateChanged);
+      
+      // Initialize viewport tracking values
+      _lastSeed = state.seed;
+      _lastDimension = state.dimension;
+      _lastCenterX = state.centerX;
+      _lastCenterZ = state.centerZ;
+      _lastZoom = state.zoom;
+
+      // Trigger initial fetch
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchStructuresForCurrentViewport();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _mapState?.removeListener(_onMapStateChanged);
     _seedController.dispose();
     _animationController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -84,6 +120,146 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     _animationController.forward(from: 0.0);
   }
 
+  void _onMapStateChanged() {
+    final state = _mapState;
+    if (state == null) return;
+
+    if (state.seed != _lastSeed ||
+        state.dimension != _lastDimension ||
+        state.centerX != _lastCenterX ||
+        state.centerZ != _lastCenterZ ||
+        state.zoom != _lastZoom) {
+      
+      _lastSeed = state.seed;
+      _lastDimension = state.dimension;
+      _lastCenterX = state.centerX;
+      _lastCenterZ = state.centerZ;
+      _lastZoom = state.zoom;
+      
+      _onMapViewportChanged();
+    }
+  }
+
+  void _onMapViewportChanged() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _fetchStructuresForCurrentViewport();
+    });
+  }
+
+  void _fetchStructuresForCurrentViewport() {
+    final state = _mapState;
+    if (state == null || _viewportSize == Size.zero || !mounted) return;
+
+    final double scale = state.scale;
+    final double halfW = _viewportSize.width / 2.0;
+    final double halfH = _viewportSize.height / 2.0;
+
+    final double minX = state.centerX - halfW * scale;
+    final double maxX = state.centerX + halfW * scale;
+    final double minZ = state.centerZ - halfH * scale;
+    final double maxZ = state.centerZ + halfH * scale;
+
+    state.fetchStructures(minX, minZ, maxX, maxZ);
+  }
+
+  List<Widget> _buildStructureMarkers(MapState state, double halfW, double halfH, double scale) {
+    final List<Widget> markers = [];
+    
+    for (final structure in state.structures) {
+      final double screenX = halfW + (structure.x - state.centerX) / scale;
+      final double screenZ = halfH + (structure.z - state.centerZ) / scale;
+      
+      const double markerSize = 28.0;
+      
+      IconData iconData;
+      Color markerColor;
+      String label;
+      
+      switch (structure.type) {
+        case 'village':
+          iconData = Icons.home_rounded;
+          markerColor = const Color(0xFF00FF88);
+          label = 'Vila';
+          break;
+        case 'monument':
+          iconData = Icons.account_balance_rounded;
+          markerColor = const Color(0xFF00E5FF);
+          label = 'Monumento';
+          break;
+        case 'stronghold':
+          iconData = Icons.brightness_auto_rounded;
+          markerColor = const Color(0xFFD500F9);
+          label = 'Forte';
+          break;
+        case 'fortress':
+          iconData = Icons.castle_rounded;
+          markerColor = const Color(0xFFFF3D00);
+          label = 'Fortaleza';
+          break;
+        case 'bastion':
+          iconData = Icons.security_rounded;
+          markerColor = const Color(0xFFFFAB00);
+          label = 'Bastião';
+          break;
+        case 'end_city':
+          iconData = Icons.location_city_rounded;
+          markerColor = const Color(0xFFAA00FF);
+          label = 'Cidade';
+          break;
+        default:
+          iconData = Icons.location_on_rounded;
+          markerColor = Colors.grey;
+          label = 'Estrutura';
+      }
+
+      markers.add(
+        Positioned(
+          key: ValueKey('structure-${structure.type}-${structure.x}-${structure.z}'),
+          left: screenX - markerSize / 2,
+          top: screenZ - markerSize / 2,
+          width: markerSize,
+          height: markerSize,
+          child: Tooltip(
+            message: '$label\nX: ${structure.x}, Z: ${structure.z}\nBioma: ${structure.biome}',
+            textStyle: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: markerColor.withValues(alpha: 0.5), width: 1),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                shape: BoxShape.circle,
+                border: Border.all(color: markerColor, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: markerColor.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Icon(
+                iconData,
+                color: markerColor,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    
+    return markers;
+  }
+
   // Generates a random 64-bit Minecraft seed
   String _generateRandomSeed() {
     final rand = math.Random();
@@ -103,15 +279,15 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       body: LayoutBuilder(
         builder: (context, constraints) {
           final Size viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+          _viewportSize = viewportSize;
           final double halfW = viewportSize.width / 2.0;
           final double halfH = viewportSize.height / 2.0;
 
           // Coordinate calculations
           final double scale = state.scale;
-          final int z = state.integerZoom;
-
-          // Get dimensions in blocks of tile at current integer zoom
-          final double tileSizeInBlocks = state.getTileSizeInBlocks(z);
+          
+          // Lock tile coordinate calculations to 1:1 blocks (zoom 4 on frontend, scale = 1.0)
+          const double tileSizeInBlocks = 256.0;
 
           // Boundaries in Minecraft blocks
           final double xMin = state.centerX - halfW * scale;
@@ -128,61 +304,11 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
           // Generate tile widgets list
           final List<Widget> tileWidgets = [];
 
-          // Render background tiles from previous integer zoom level (stretched/shrunk)
-          final int prevZ = state.previousIntegerZoom;
-          if (prevZ != z) {
-            final double prevTileSizeInBlocks = state.getTileSizeInBlocks(prevZ);
-
-            final int prevTxMin = (xMin / prevTileSizeInBlocks).floor();
-            final int prevTxMax = (xMax / prevTileSizeInBlocks).floor();
-            final int prevTyMin = (zMin / prevTileSizeInBlocks).floor();
-            final int prevTyMax = (zMax / prevTileSizeInBlocks).floor();
-
-            // Clamp bounds to prevent rendering crashes
-            final int clampedPrevTxMin = prevTxMin.clamp(prevTxMin, prevTxMin + 25);
-            final int clampedPrevTxMax = prevTxMax.clamp(clampedPrevTxMin, clampedPrevTxMin + 25);
-            final int clampedPrevTyMin = prevTyMin.clamp(prevTyMin, prevTyMin + 25);
-            final int clampedPrevTyMax = prevTyMax.clamp(clampedPrevTyMin, clampedPrevTyMin + 25);
-
-            for (int tx = clampedPrevTxMin; tx <= clampedPrevTxMax; tx++) {
-              for (int ty = clampedPrevTyMin; ty <= clampedPrevTyMax; ty++) {
-                if (state.isTileCached(tx, ty, prevZ)) {
-                  final double tileX = tx * prevTileSizeInBlocks;
-                  final double tileZ = ty * prevTileSizeInBlocks;
-
-                  // Screen coordinates at current scale
-                  final double screenX = halfW + (tileX - state.centerX) / scale;
-                  final double screenZ = halfH + (tileZ - state.centerZ) / scale;
-                  final double sizeOnScreen = prevTileSizeInBlocks / scale;
-
-                  tileWidgets.add(
-                    Positioned(
-                      key: ValueKey('bg-${state.seed}-${state.dimension}-$prevZ-$tx-$ty'),
-                      left: screenX,
-                      top: screenZ,
-                      width: sizeOnScreen + 0.5,
-                      height: sizeOnScreen + 0.5,
-                      child: TileWidget(
-                        key: ValueKey('bg-tile-${state.seed}-${state.dimension}-$prevZ-$tx-$ty'),
-                        seed: state.seed,
-                        dimension: state.dimension,
-                        zoom: prevZ,
-                        tx: tx,
-                        ty: ty,
-                        size: sizeOnScreen,
-                      ),
-                    ),
-                  );
-                }
-              }
-            }
-          }
-          
           // Clamp bounds to prevent rendering crashes on extreme invalid states
-          final int clampedTxMin = txMin.clamp(txMin, txMin + 25);
-          final int clampedTxMax = txMax.clamp(clampedTxMin, clampedTxMin + 25);
-          final int clampedTyMin = tyMin.clamp(tyMin, tyMin + 25);
-          final int clampedTyMax = tyMax.clamp(clampedTyMin, clampedTyMin + 25);
+          final int clampedTxMin = txMin;
+          final int clampedTxMax = txMax.clamp(clampedTxMin, clampedTxMin + 40);
+          final int clampedTyMin = tyMin;
+          final int clampedTyMax = tyMax.clamp(clampedTyMin, clampedTyMin + 40);
 
           for (int tx = clampedTxMin; tx <= clampedTxMax; tx++) {
             for (int ty = clampedTyMin; ty <= clampedTyMax; ty++) {
@@ -198,16 +324,16 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
               tileWidgets.add(
                 Positioned(
-                  key: ValueKey('fg-${state.seed}-${state.dimension}-$z-$tx-$ty'),
+                  key: ValueKey('tile-${state.seed}-${state.dimension}-$tx-$ty'),
                   left: screenX,
                   top: screenZ,
                   width: sizeOnScreen + 0.5, // Tiny overlap to fix seam lines
                   height: sizeOnScreen + 0.5,
                   child: TileWidget(
-                    key: ValueKey('fg-tile-${state.seed}-${state.dimension}-$z-$tx-$ty'),
+                    key: ValueKey('tile-w-${state.seed}-${state.dimension}-$tx-$ty'),
                     seed: state.seed,
                     dimension: state.dimension,
-                    zoom: z,
+                    zoom: 8, // Fixed to 8 for backend compatibility
                     tx: tx,
                     ty: ty,
                     size: sizeOnScreen,
@@ -274,6 +400,9 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                         
                         // Map Slippy Tiles
                         ...tileWidgets,
+                        
+                        // Map Structure Markers Layer
+                        ..._buildStructureMarkers(state, halfW, halfH, scale),
                         
                         // Custom Painter for axes and grid overlay
                         CustomPaint(

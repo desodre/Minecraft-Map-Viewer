@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mc_map_viewer/state/map_state.dart';
 
