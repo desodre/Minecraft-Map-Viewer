@@ -305,7 +305,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                         ),
                                         SizedBox(width: 8),
                                         Text(
-                                          'MINECRAFT SEED MAP',
+                                          'SEED MAP',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,
